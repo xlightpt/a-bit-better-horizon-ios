@@ -63,6 +63,8 @@ pub struct Post {
     /// Output pixels per rendered pixel while TAA is on (1: native): the world renders
     /// this much smaller and TAA rebuilds it at the resolution scale's size.
     pub upscale: f32,
+    /// Spatial reconstruction factor, independent of TAA (1: native resolution).
+    pub spatial_upscale: f32,
     /// TAA runs this frame (`jitter`): not on the title screen or under a shader pack.
     taa_on: bool,
     target: Option<WorldTarget>,
@@ -244,6 +246,7 @@ impl Post {
             antialias: false,
             taa: false,
             upscale: 1.0,
+            spatial_upscale: 1.0,
             taa_on: false,
             target: None,
             taa_resources,
@@ -261,7 +264,7 @@ impl Post {
     /// The world's rendered size and the size it is shown at (TAA's history).
     fn sizes(&self, window: [u32; 2]) -> ([u32; 2], [u32; 2]) {
         let output = window.map(|v| ((v as f32 * self.scale).round() as u32).clamp(1, 8192));
-        let upscale = if self.taa_on { self.upscale } else { 1.0 };
+        let upscale = if self.taa_on { self.upscale } else { self.spatial_upscale };
         (
             output.map(|v| ((v as f32 / upscale).round() as u32).max(1)),
             output,
@@ -320,7 +323,7 @@ impl Post {
         window: [u32; 2],
         always: bool,
     ) -> Option<(wgpu::TextureView, wgpu::TextureView)> {
-        if self.scale == 1.0 && !self.antialias && !self.taa_on && !always {
+        if self.scale == 1.0 && self.spatial_upscale <= 1.0 && !self.antialias && !self.taa_on && !always {
             self.target = None;
             return None;
         }
