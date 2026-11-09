@@ -6748,20 +6748,17 @@ impl Renderer {
     /// On iOS, selecting an upscale factor also enables the Metal-safe temporal
     /// reconstruction path; this is a spatial-resolution saving with TAA history,
     /// not FSR 3.1 frame interpolation.
+    /// `upscale`: output pixels per rendered pixel, for TAA to rebuild (1: native).
     pub fn set_world_post(&mut self, scale: f32, antialias: bool, taa: bool, upscale: f32) {
-        let ios_upscale = cfg!(target_os = "ios") && upscale > 1.0;
-        let taa = (taa || ios_upscale) && self.world_post.supports_taa();
+        // Do not force TAA as an iOS upscaler: the device logs report the same
+        // renderer freeze with TAA/antialiasing enabled. Keep the user's explicit
+        // setting and let unsupported temporal paths remain off.
+        let taa = taa && self.world_post.supports_taa();
         self.world_post.scale = scale.clamp(0.25, 2.0);
         self.world_post.antialias = antialias && !taa;
         self.world_post.taa = taa;
-        let max_upscale = if cfg!(target_os = "ios") { 2.0 } else { 4.0 };
-        self.world_post.upscale = if taa {
-            upscale.clamp(1.0, max_upscale)
-        } else {
-            1.0
-        };
+        self.world_post.upscale = if taa { upscale.clamp(1.0, 4.0) } else { 1.0 };
     }
-    /// Runs `post` over the world from now on (`None`: no pack), for the dimension `dimension`;
     /// `block_ids` gives each block sprite layer's `mc_Entity` (id, fluid) and `at_midBlock.w`
     /// (its block's light), three values a layer.
     /// Returns the programs that run and the notes of loading them, or why the pack can't run:
