@@ -6753,9 +6753,12 @@ impl Renderer {
         // Do not force TAA as an iOS upscaler: the device logs report the same
         // renderer freeze with TAA/antialiasing enabled. Keep the user's explicit
         // setting and let unsupported temporal paths remain off.
-        let taa = taa && self.world_post.supports_taa();
+        let ios = cfg!(target_os = "ios");
+        let taa = !ios && taa && self.world_post.supports_taa();
         self.world_post.scale = scale.clamp(0.25, 2.0);
-        self.world_post.antialias = antialias && !taa;
+        // TAA and FXAA have both been reported to freeze on the target iPhone.
+        // iOS uses the independent spatial path below until those paths are tested.
+        self.world_post.antialias = antialias && !taa && !ios;
         self.world_post.taa = taa;
         self.world_post.upscale = if taa { upscale.clamp(1.0, 4.0) } else { 1.0 };
         // iOS spatial reconstruction uses the existing linear post pass, not TAA.
