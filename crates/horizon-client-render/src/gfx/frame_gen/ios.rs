@@ -5,7 +5,7 @@
 //! no TAA dependency. Moving objects can show ghosting; this is a prototype intended
 //! to validate the Metal presentation path before adding motion-compensated vectors.
 
-use glam::{Mat4, Vec3};
+use glam::Mat4;
 use std::{
     sync::{
         Arc,
@@ -54,6 +54,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 }
 "#;
 
+#[allow(dead_code)]
 pub struct Camera {
     pub jittered: Mat4,
     pub view_proj: Mat4,
