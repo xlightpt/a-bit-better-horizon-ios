@@ -6758,6 +6758,13 @@ impl Renderer {
         self.world_post.antialias = antialias && !taa;
         self.world_post.taa = taa;
         self.world_post.upscale = if taa { upscale.clamp(1.0, 4.0) } else { 1.0 };
+        // iOS spatial reconstruction uses the existing linear post pass, not TAA.
+        // Keep this independent so selecting an upscale factor cannot activate temporal history.
+        self.world_post.spatial_upscale = if cfg!(target_os = "ios") {
+            upscale.clamp(1.0, 2.0)
+        } else {
+            1.0
+        };
     }
     /// `block_ids` gives each block sprite layer's `mc_Entity` (id, fluid) and `at_midBlock.w`
     /// (its block's light), three values a layer.
