@@ -6735,18 +6735,31 @@ impl Renderer {
     }
     /// Frame generation on or off (FSR 3.1's frame interpolation).
     pub fn set_frame_generation(&mut self, on: bool) {
+        // FSR 3.1 frame interpolation is not enabled on iOS: its present-thread and
+        // optical-flow path is not validated on the iPhone Metal surface. Use the
+        // temporal upscaler below instead of risking a device/renderer hang.
+        let on = on && !cfg!(target_os = "ios");
         if !on {
             self.frame_gen.stop();
         }
         self.frame_gen.on = on;
     }
     /// `upscale`: output pixels per rendered pixel, for TAA to rebuild (1: native).
+    /// On iOS, selecting an upscale factor also enables the Metal-safe temporal
+    /// reconstruction path; this is a spatial-resolution saving with TAA history,
+    /// not FSR 3.1 frame interpolation.
     pub fn set_world_post(&mut self, scale: f32, antialias: bool, taa: bool, upscale: f32) {
-        let taa = taa && self.world_post.supports_taa();
+        let ios_upscale = cfg!(target_os = "ios") && upscale > 1.0;
+        let taa = (taa || ios_upscale) && self.world_post.supports_taa();
         self.world_post.scale = scale.clamp(0.25, 2.0);
         self.world_post.antialias = antialias && !taa;
         self.world_post.taa = taa;
-        self.world_post.upscale = if taa { upscale.clamp(1.0, 4.0) } else { 1.0 };
+        let max_upscale = if cfg!(target_os = "ios") { 2.0 } else { 4.0 };
+        self.world_post.upscale = if taa {
+            upscale.clamp(1.0, max_upscale)
+        } else {
+            1.0
+        };
     }
     /// Runs `post` over the world from now on (`None`: no pack), for the dimension `dimension`;
     /// `block_ids` gives each block sprite layer's `mc_Entity` (id, fluid) and `at_midBlock.w`
@@ -8972,7 +8985,8 @@ impl Renderer {
         if let Some(hdr) = &mut self.hdr {
             hdr.lighting = hdr_lighting && hdr.look;
         }
-        let oit_on = self.improved_transparency
+        let oit_on = !cfg!(target_os = "ios")
+            && self.improved_transparency
             && !frame.title
             && self.pack_post.as_ref().is_none_or(|p| p.1.is_none())
             && self.native.is_none()
