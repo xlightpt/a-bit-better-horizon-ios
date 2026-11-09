@@ -358,7 +358,8 @@ impl FarDetail {
 pub enum FrameGeneration {
     #[default]
     Off,
-    /// AMD FidelityFX Super Resolution 3.1's frame interpolation, ported to WGSL.
+    /// The frame interpolation option. On iOS this selects Horizon's own WGSL
+    /// motion-vector and optical-flow path; other platforms use the FSR 3.1 path.
     Fsr31,
 }
 impl FrameGeneration {
@@ -372,7 +373,9 @@ impl FrameGeneration {
     pub fn label(self) -> &'static str {
         match self {
             FrameGeneration::Off => "Off",
-            FrameGeneration::Fsr31 => "FSR 3.1",
+            FrameGeneration::Fsr31 => {
+                if cfg!(target_os = "ios") { "Horizon Motion" } else { "FSR 3.1" }
+            },
         }
     }
     fn parse(s: &str) -> Self {
