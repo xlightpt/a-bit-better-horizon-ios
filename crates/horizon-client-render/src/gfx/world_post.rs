@@ -1,5 +1,5 @@
 //! Resolution scale, FXAA and TAA (Horizon settings): the world renders into its
-//! own target at the scaled size, then one full-screen pass copies or
+//! own target at the scaled size, then one full-screen pass reconstructs or
 //! anti-aliases it onto the screen, under the hand and HUD. With none on,
 //! the world renders straight to the screen.
 //!
