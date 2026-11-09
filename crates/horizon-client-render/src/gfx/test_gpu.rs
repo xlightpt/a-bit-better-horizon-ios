@@ -12,3 +12,16 @@ pub(crate) fn instance() -> wgpu::Instance {
     }
     wgpu::Instance::new(descriptor.with_env())
 }
+
+/// The frame-generation GPU tests must exercise Metal on macOS CI, not silently skip.
+#[cfg(target_os = "macos")]
+#[test]
+fn metal_adapter_is_available() {
+    let adapter = pollster::block_on(instance().request_adapter(&Default::default()))
+        .expect("macOS Metal adapter is required for frame-generation GPU tests");
+    assert_eq!(
+        adapter.get_info().backend,
+        wgpu::Backend::Metal,
+        "frame-generation CI must run against the Metal backend",
+    );
+}
