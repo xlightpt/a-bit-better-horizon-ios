@@ -167,10 +167,6 @@ mod direct;
 mod end_sky;
 pub mod entity_skin;
 mod flat;
-#[cfg(target_os = "ios")]
-#[path = "frame_gen/ios.rs"]
-mod frame_gen;
-#[cfg(not(target_os = "ios"))]
 mod frame_gen;
 mod gpu_culling;
 mod hdr;
@@ -6737,8 +6733,8 @@ impl Renderer {
     pub fn frame_generation_share(&self) -> Option<f32> {
         self.frame_gen.made_share
     }
-    /// Frame generation on or off. iOS uses Horizon's non-FSR midpoint interpolator;
-    /// other platforms retain the existing FSR 3.1 implementation.
+    /// Frame generation on or off. iOS uses Horizon's WGSL motion-vector and optical-flow
+    /// interpolation path; other platforms retain the existing FSR 3.1 integration.
     pub fn set_frame_generation(&mut self, on: bool) {
         if !on {
             self.frame_gen.stop();
