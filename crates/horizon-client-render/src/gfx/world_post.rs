@@ -55,6 +55,8 @@ pub struct Post {
     sampler: wgpu::Sampler,
     copy: wgpu::RenderPipeline,
     fxaa: wgpu::RenderPipeline,
+    spatial: wgpu::RenderPipeline,
+    spatial_fxaa: wgpu::RenderPipeline,
     format: wgpu::TextureFormat,
     /// World resolution relative to the window (0.5..=2.0).
     pub scale: f32,
@@ -239,6 +241,8 @@ impl Post {
         Self {
             copy: pipeline("fs_copy", &pipeline_layout, format),
             fxaa: pipeline("fs_fxaa", &pipeline_layout, format),
+            spatial: pipeline("fs_spatial", &pipeline_layout, format),
+            spatial_fxaa: pipeline("fs_spatial_fxaa", &pipeline_layout, format),
             layout,
             sampler,
             format,
@@ -558,11 +562,14 @@ impl Post {
             color_attachments: &attachments,
             ..Default::default()
         });
-        pass.set_pipeline(if self.antialias {
+        let pipeline = if self.spatial_upscale > 1.0 {
+            if self.antialias { &self.spatial_fxaa } else { &self.spatial }
+        } else if self.antialias {
             &self.fxaa
         } else {
             &self.copy
-        });
+        };
+        pass.set_pipeline(pipeline);
         pass.set_bind_group(0, group, &[]);
         pass.draw(0..3, 0..1);
     }
