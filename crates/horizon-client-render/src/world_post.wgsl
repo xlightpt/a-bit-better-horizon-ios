@@ -26,6 +26,68 @@ fn luma(c: vec3<f32>) -> f32 {
     return dot(c, vec3(0.299, 0.587, 0.114));
 }
 
+
+// Catmull-Rom reconstruction for the iOS spatial upscaler. Five bilinear taps
+// approximate the 4x4 cubic kernel while keeping texture bandwidth bounded.
+fn sample_spatial(uv: vec2<f32>) -> vec4<f32> {
+    let size = vec2<f32>(textureDimensions(world));
+    let pos = uv * size;
+    let centre = floor(pos - 0.5) + 0.5;
+    let f = pos - centre;
+    let w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+    let w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+    let w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+    let w3 = f * f * (-0.5 + 0.5 * f);
+    let w12 = w1 + w2;
+    let t0 = (centre - 1.0) / size;
+    let t3 = (centre + 2.0) / size;
+    let t12 = (centre + w2 / w12) / size;
+    let c =
+        textureSampleLevel(world, world_sampler, vec2(t12.x, t0.y), 0.0) * (w12.x * w0.y)
+        + textureSampleLevel(world, world_sampler, vec2(t0.x, t12.y), 0.0) * (w0.x * w12.y)
+        + textureSampleLevel(world, world_sampler, t12, 0.0) * (w12.x * w12.y)
+        + textureSampleLevel(world, world_sampler, vec2(t3.x, t12.y), 0.0) * (w3.x * w12.y)
+        + textureSampleLevel(world, world_sampler, vec2(t12.x, t3.y), 0.0) * (w12.x * w3.y);
+    let weight = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+    return c / max(weight, 0.0001);
+}
+
+@fragment fn fs_spatial(in: PostOut) -> @location(0) vec4<f32> {
+    return sample_spatial(in.uv);
+}
+
+// Spatial reconstruction plus a lightweight FXAA edge pass. Derivatives give
+// output-pixel offsets, so the edge filter remains stable at non-integer scales.
+@fragment fn fs_spatial_fxaa(in: PostOut) -> @location(0) vec4<f32> {
+    let dx = dpdx(in.uv);
+    let dy = dpdy(in.uv);
+    let centre = sample_spatial(in.uv);
+    let nw = luma(sample_spatial(in.uv - 0.5 * dx - 0.5 * dy).rgb);
+    let ne = luma(sample_spatial(in.uv + 0.5 * dx - 0.5 * dy).rgb);
+    let sw = luma(sample_spatial(in.uv - 0.5 * dx + 0.5 * dy).rgb);
+    let se = luma(sample_spatial(in.uv + 0.5 * dx + 0.5 * dy).rgb);
+    let m = luma(centre.rgb);
+    let lo = min(m, min(min(nw, ne), min(sw, se)));
+    let hi = max(m, max(max(nw, ne), max(sw, se)));
+    if hi - lo < max(0.0312, hi * 0.125) {
+        return centre;
+    }
+    var dir = vec2(-((nw + ne) - (sw + se)), (nw + sw) - (ne + se));
+    let reduce = max((nw + ne + sw + se) * 0.25 * 0.125, 1.0 / 128.0);
+    let scale = 1.0 / (min(abs(dir.x), abs(dir.y)) + reduce);
+    dir = clamp(dir * scale, vec2(-8.0), vec2(8.0));
+    let edge = dx * dir.x + dy * dir.y;
+    let a = 0.5 * (sample_spatial(in.uv + edge * (1.0 / 3.0 - 0.5)).rgb
+        + sample_spatial(in.uv + edge * (2.0 / 3.0 - 0.5)).rgb);
+    let b = a * 0.5 + 0.25 * (sample_spatial(in.uv - edge * 0.5).rgb
+        + sample_spatial(in.uv + edge * 0.5).rgb);
+    let lb = luma(b);
+    if lb < lo || lb > hi {
+        return vec4(a, centre.a);
+    }
+    return vec4(b, centre.a);
+}
+
 // FXAA 3.11 (console quality): blend along the local edge direction.
 @fragment fn fs_fxaa(in: PostOut) -> @location(0) vec4<f32> {
     let texel = 1.0 / vec2<f32>(textureDimensions(world));
