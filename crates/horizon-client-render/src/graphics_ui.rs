@@ -385,7 +385,7 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
                         h(
                             H::FrameGeneration,
                             Medium,
-                            "Shows a made-up frame between each two real ones: smoother, a little more lag.",
+                            "Reconstructs an intermediate frame using motion vectors and optical flow; may add latency.",
                         ),
                     ],
                 ),
@@ -3334,7 +3334,7 @@ mod tests {
         let missed: Vec<_> = missed
             .into_iter()
             .filter(|m| !m.starts_with(|c: char| c.is_ascii_digit()) && !m.starts_with("Auto ("))
-            .filter(|m| !["An", "Aus", "FSR 3.1", "key.keyboard.unknown"].contains(&m.as_str()))
+            .filter(|m| !["An", "Aus", "FSR 3.1", "Horizon Motion", "key.keyboard.unknown"].contains(&m.as_str()))
             .collect();
         assert_eq!(missed, Vec::<String>::new());
     }

@@ -1,5 +1,5 @@
 //! Resolution scale, FXAA and TAA (Horizon settings): the world renders into its
-//! own target at the scaled size, then one full-screen pass copies or
+//! own target at the scaled size, then one full-screen pass reconstructs or
 //! anti-aliases it onto the screen, under the hand and HUD. With none on,
 //! the world renders straight to the screen.
 //!
@@ -55,6 +55,8 @@ pub struct Post {
     sampler: wgpu::Sampler,
     copy: wgpu::RenderPipeline,
     fxaa: wgpu::RenderPipeline,
+    spatial: wgpu::RenderPipeline,
+    spatial_fxaa: wgpu::RenderPipeline,
     format: wgpu::TextureFormat,
     /// World resolution relative to the window (0.5..=2.0).
     pub scale: f32,
@@ -63,6 +65,8 @@ pub struct Post {
     /// Output pixels per rendered pixel while TAA is on (1: native): the world renders
     /// this much smaller and TAA rebuilds it at the resolution scale's size.
     pub upscale: f32,
+    /// Spatial reconstruction factor, independent of TAA (1: native resolution).
+    pub spatial_upscale: f32,
     /// TAA runs this frame (`jitter`): not on the title screen or under a shader pack.
     taa_on: bool,
     target: Option<WorldTarget>,
@@ -237,6 +241,8 @@ impl Post {
         Self {
             copy: pipeline("fs_copy", &pipeline_layout, format),
             fxaa: pipeline("fs_fxaa", &pipeline_layout, format),
+            spatial: pipeline("fs_spatial", &pipeline_layout, format),
+            spatial_fxaa: pipeline("fs_spatial_fxaa", &pipeline_layout, format),
             layout,
             sampler,
             format,
@@ -244,6 +250,7 @@ impl Post {
             antialias: false,
             taa: false,
             upscale: 1.0,
+            spatial_upscale: 1.0,
             taa_on: false,
             target: None,
             taa_resources,
@@ -261,7 +268,7 @@ impl Post {
     /// The world's rendered size and the size it is shown at (TAA's history).
     fn sizes(&self, window: [u32; 2]) -> ([u32; 2], [u32; 2]) {
         let output = window.map(|v| ((v as f32 * self.scale).round() as u32).clamp(1, 8192));
-        let upscale = if self.taa_on { self.upscale } else { 1.0 };
+        let upscale = if self.taa_on { self.upscale } else { self.spatial_upscale };
         (
             output.map(|v| ((v as f32 / upscale).round() as u32).max(1)),
             output,
@@ -320,7 +327,7 @@ impl Post {
         window: [u32; 2],
         always: bool,
     ) -> Option<(wgpu::TextureView, wgpu::TextureView)> {
-        if self.scale == 1.0 && !self.antialias && !self.taa_on && !always {
+        if self.scale == 1.0 && self.spatial_upscale <= 1.0 && !self.antialias && !self.taa_on && !always {
             self.target = None;
             return None;
         }
@@ -555,11 +562,14 @@ impl Post {
             color_attachments: &attachments,
             ..Default::default()
         });
-        pass.set_pipeline(if self.antialias {
+        let pipeline = if self.spatial_upscale > 1.0 {
+            if self.antialias { &self.spatial_fxaa } else { &self.spatial }
+        } else if self.antialias {
             &self.fxaa
         } else {
             &self.copy
-        });
+        };
+        pass.set_pipeline(pipeline);
         pass.set_bind_group(0, group, &[]);
         pass.draw(0..3, 0..1);
     }

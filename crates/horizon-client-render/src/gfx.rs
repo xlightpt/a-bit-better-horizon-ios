@@ -6733,7 +6733,8 @@ impl Renderer {
     pub fn frame_generation_share(&self) -> Option<f32> {
         self.frame_gen.made_share
     }
-    /// Frame generation on or off (FSR 3.1's frame interpolation).
+    /// Frame generation on or off. iOS uses Horizon's WGSL motion-vector and optical-flow
+    /// interpolation path; other platforms retain the existing FSR 3.1 integration.
     pub fn set_frame_generation(&mut self, on: bool) {
         if !on {
             self.frame_gen.stop();
@@ -6741,14 +6742,27 @@ impl Renderer {
         self.frame_gen.on = on;
     }
     /// `upscale`: output pixels per rendered pixel, for TAA to rebuild (1: native).
+    /// On iOS, selecting an upscale factor enables the Metal-safe Catmull-Rom
+    /// spatial reconstruction path; it does not enable temporal history or FSR.
     pub fn set_world_post(&mut self, scale: f32, antialias: bool, taa: bool, upscale: f32) {
-        let taa = taa && self.world_post.supports_taa();
+        // Do not force TAA as an iOS upscaler: the device logs report the same
+        // renderer freeze with TAA/antialiasing enabled. Keep the user's explicit
+        // setting and let unsupported temporal paths remain off.
+        let ios = cfg!(target_os = "ios");
+        let taa = !ios && taa && self.world_post.supports_taa();
         self.world_post.scale = scale.clamp(0.25, 2.0);
+        // Keep TAA disabled on iOS until its depth-history path is device-validated.
+        // The dedicated spatial+FXAA pipeline is Metal-safe and independent of TAA.
         self.world_post.antialias = antialias && !taa;
         self.world_post.taa = taa;
         self.world_post.upscale = if taa { upscale.clamp(1.0, 4.0) } else { 1.0 };
+        // iOS spatial reconstruction is Catmull-Rom and independent of temporal history.
+        self.world_post.spatial_upscale = if cfg!(target_os = "ios") {
+            upscale.clamp(1.0, 2.0)
+        } else {
+            1.0
+        };
     }
-    /// Runs `post` over the world from now on (`None`: no pack), for the dimension `dimension`;
     /// `block_ids` gives each block sprite layer's `mc_Entity` (id, fluid) and `at_midBlock.w`
     /// (its block's light), three values a layer.
     /// Returns the programs that run and the notes of loading them, or why the pack can't run:
@@ -8972,7 +8986,8 @@ impl Renderer {
         if let Some(hdr) = &mut self.hdr {
             hdr.lighting = hdr_lighting && hdr.look;
         }
-        let oit_on = self.improved_transparency
+        let oit_on = !cfg!(target_os = "ios")
+            && self.improved_transparency
             && !frame.title
             && self.pack_post.as_ref().is_none_or(|p| p.1.is_none())
             && self.native.is_none()

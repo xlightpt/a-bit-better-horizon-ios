@@ -50,6 +50,14 @@ jobs:
         if: runner.environment == 'github-hosted'
         with:
           shared-key: ios-${{ env.IOS_TARGET }}
+
+      - name: Test frame generation on the macOS Metal backend
+        env:
+          WGPU_BACKEND: metal
+        run: |
+          cargo test --locked -p horizon-client-render --lib metal_adapter_is_available -- --nocapture
+          cargo test --locked -p horizon-client-render --lib metal_world_post_pipelines_compile -- --nocapture
+          cargo test --locked -p horizon-client-render --lib gfx::frame_gen:: -- --nocapture
       - name: Build the game
         # The Microsoft sign-in app (msa.rs): a repository variable overrides the built-in one; unset, it stays.
         env:
