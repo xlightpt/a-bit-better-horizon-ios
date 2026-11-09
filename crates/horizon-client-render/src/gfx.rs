@@ -167,6 +167,10 @@ mod direct;
 mod end_sky;
 pub mod entity_skin;
 mod flat;
+#[cfg(target_os = "ios")]
+#[path = "frame_gen/ios.rs"]
+mod frame_gen;
+#[cfg(not(target_os = "ios"))]
 mod frame_gen;
 mod gpu_culling;
 mod hdr;
@@ -6733,12 +6737,9 @@ impl Renderer {
     pub fn frame_generation_share(&self) -> Option<f32> {
         self.frame_gen.made_share
     }
-    /// Frame generation on or off (FSR 3.1's frame interpolation).
+    /// Frame generation on or off. iOS uses Horizon's non-FSR midpoint interpolator;
+    /// other platforms retain the existing FSR 3.1 implementation.
     pub fn set_frame_generation(&mut self, on: bool) {
-        // FSR 3.1 frame interpolation is not enabled on iOS: its present-thread and
-        // optical-flow path is not validated on the iPhone Metal surface. Use the
-        // temporal upscaler below instead of risking a device/renderer hang.
-        let on = on && !cfg!(target_os = "ios");
         if !on {
             self.frame_gen.stop();
         }
