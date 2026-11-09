@@ -38,6 +38,13 @@ pub enum Stage {
 /// requesting the feature; without it, `supported` stays false and the renderer
 /// uses its regular transparency path.
 pub fn features(adapter: &wgpu::Adapter) -> wgpu::Features {
+    // The iOS Metal path must not enable OIT's Rgba32Float depth-bounds target.
+    // Some Apple GPU/Metal combinations expose FLOAT32_BLENDABLE inconsistently:
+    // pipeline validation can still reject blending for this exact attachment.
+    // Keep vanilla transparency on iOS; the regular renderer remains available.
+    if cfg!(target_os = "ios") {
+        return wgpu::Features::empty();
+    }
     let float32_blendable = adapter.features().contains(wgpu::Features::FLOAT32_BLENDABLE)
         && adapter
             .get_texture_format_features(BOUNDS_FORMAT)
