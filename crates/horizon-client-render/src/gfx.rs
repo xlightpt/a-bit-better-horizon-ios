@@ -6746,10 +6746,8 @@ impl Renderer {
         self.frame_gen.on = on;
     }
     /// `upscale`: output pixels per rendered pixel, for TAA to rebuild (1: native).
-    /// On iOS, selecting an upscale factor also enables the Metal-safe temporal
-    /// reconstruction path; this is a spatial-resolution saving with TAA history,
-    /// not FSR 3.1 frame interpolation.
-    /// `upscale`: output pixels per rendered pixel, for TAA to rebuild (1: native).
+    /// On iOS, selecting an upscale factor enables the Metal-safe Catmull-Rom
+    /// spatial reconstruction path; it does not enable temporal history or FSR.
     pub fn set_world_post(&mut self, scale: f32, antialias: bool, taa: bool, upscale: f32) {
         // Do not force TAA as an iOS upscaler: the device logs report the same
         // renderer freeze with TAA/antialiasing enabled. Keep the user's explicit
@@ -6762,8 +6760,7 @@ impl Renderer {
         self.world_post.antialias = antialias && !taa;
         self.world_post.taa = taa;
         self.world_post.upscale = if taa { upscale.clamp(1.0, 4.0) } else { 1.0 };
-        // iOS spatial reconstruction uses the existing linear post pass, not TAA.
-        // Keep this independent so selecting an upscale factor cannot activate temporal history.
+        // iOS spatial reconstruction is Catmull-Rom and independent of temporal history.
         self.world_post.spatial_upscale = if cfg!(target_os = "ios") {
             upscale.clamp(1.0, 2.0)
         } else {
