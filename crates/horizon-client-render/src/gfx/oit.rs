@@ -29,8 +29,25 @@ pub enum Stage {
 }
 
 /// What the device must support: max blending on 32-bit float targets.
+///
+/// `FLOAT32_BLENDABLE` alone is not enough to build the depth-bounds pipeline:
+/// the actual `Rgba32Float` attachment must advertise blending too. Some
+/// Metal adapters (including iOS devices) can expose the feature bit while
+/// this format is not blendable, which makes `create_render_pipeline` panic
+/// when Improved Transparency is enabled. Check the exact attachment before
+/// requesting the feature; without it, `supported` stays false and the renderer
+/// uses its regular transparency path.
 pub fn features(adapter: &wgpu::Adapter) -> wgpu::Features {
-    adapter.features() & wgpu::Features::FLOAT32_BLENDABLE
+    let float32_blendable = adapter.features().contains(wgpu::Features::FLOAT32_BLENDABLE)
+        && adapter
+            .get_texture_format_features(BOUNDS_FORMAT)
+            .flags
+            .contains(wgpu::TextureFormatFeatureFlags::BLENDABLE);
+    if float32_blendable {
+        wgpu::Features::FLOAT32_BLENDABLE
+    } else {
+        wgpu::Features::empty()
+    }
 }
 
 pub fn supported(device: &wgpu::Device) -> bool {
